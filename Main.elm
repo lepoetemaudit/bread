@@ -12,24 +12,24 @@ type alias DecodeContext =
 
 intToBitString : Int -> List Bit
 intToBitString int =
-  List.map (\i -> if (Bitwise.and (Bitwise.shiftLeft 1 i) int) > 0 then 
+  List.map (\i -> if (Bitwise.and (Bitwise.shiftLeftBy 1 i) int) > 0 then 
                     On 
                   else 
                     Off) 
-           [0..7]
+           (List.range 0 7)
   
 bitStringToInt : List Bit -> Int
 bitStringToInt bitString =
   bitString
   |> List.indexedMap (\shift bit -> if bit == On then
-                                      Bitwise.shiftLeft 1 shift
+                                      Bitwise.shiftLeftBy 1 shift
                                     else
                                       0)
   |> List.sum
 
 takeBit : DecodeContext -> (DecodeContext, Bit)
 takeBit ctx =
-  let val = Bitwise.shiftLeft 1 ctx.bitPosition
+  let val = Bitwise.shiftLeftBy 1 ctx.bitPosition
   in
     ( { ctx | bitPosition = ctx.bitPosition + 1 }
     , if (Bitwise.and val ctx.currentByte) > 0 then
@@ -37,25 +37,25 @@ takeBit ctx =
       else
         Off )
 
-readBitString' : Int -> DecodeContext -> BitString -> (BitString, DecodeContext)
-readBitString' amount ctx bits =
+readBitString_ : Int -> DecodeContext -> BitString -> (BitString, DecodeContext)
+readBitString_ amount ctx bits =
   if amount == 0 then
     (List.reverse bits, ctx)
   else
-    let (ctx, bit) = takeBit ctx
-        bits' = bit :: bits
+    let (ctx_, bit) = takeBit ctx
+        bits_ = bit :: bits
     in 
-      readBitString' (amount - 1) ctx bits'    
+      readBitString_ (amount - 1) ctx_ bits_    
 
 readBitString : Int -> DecodeContext -> (BitString, DecodeContext)
 readBitString amount ctx =
-  readBitString' amount ctx []
+  readBitString_ amount ctx []
 
 bitNum : Int -> DecodeContext -> (Int, DecodeContext)
 bitNum amount ctx =
-  let (bits, ctx') = readBitString amount ctx
+  let (bits, ctx_) = readBitString amount ctx
   in 
-    (bitStringToInt bits, ctx') 
+    (bitStringToInt bits, ctx_) 
   
 read : List Int -> DecoderFunc a -> (a, DecodeContext)
 read bytes decoder =
