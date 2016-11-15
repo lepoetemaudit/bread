@@ -12,24 +12,25 @@ type alias DecodeContext =
 
 intToBitString : Int -> List Bit
 intToBitString int =
-  List.map (\i -> if (Bitwise.and (Bitwise.shiftLeftBy 1 i) int) > 0 then 
+  List.map (\i -> if (Bitwise.and (Bitwise.shiftLeftBy i 1) int) > 0 then 
                     On 
                   else 
                     Off) 
            (List.range 0 7)
+          
   
 bitStringToInt : List Bit -> Int
 bitStringToInt bitString =
   bitString
   |> List.indexedMap (\shift bit -> if bit == On then
-                                      Bitwise.shiftLeftBy 1 shift
+                                      Bitwise.shiftLeftBy shift 1
                                     else
                                       0)
   |> List.sum
 
 takeBit : DecodeContext -> (DecodeContext, Bit)
 takeBit ctx =
-  let val = Bitwise.shiftLeftBy 1 ctx.bitPosition
+  let val = Bitwise.shiftLeftBy ctx.bitPosition 1
   in
     ( { ctx | bitPosition = ctx.bitPosition + 1 }
     , if (Bitwise.and val ctx.currentByte) > 0 then
@@ -45,7 +46,7 @@ readBitString_ amount ctx bits =
     let (ctx_, bit) = takeBit ctx
         bits_ = bit :: bits
     in 
-      readBitString_ (amount - 1) ctx_ bits_    
+      readBitString_ (amount - 1) ctx_ bits_
 
 readBitString : Int -> DecodeContext -> (BitString, DecodeContext)
 readBitString amount ctx =
@@ -61,7 +62,7 @@ read : List Int -> DecoderFunc a -> (a, DecodeContext)
 read bytes decoder =
   decoder { bitPosition = 0
           , bytes = bytes
-          , currentByte = 17 }
+          , currentByte = 0xaf }
 
 type alias DecoderFunc a = (DecodeContext -> (a, DecodeContext)) 
 
@@ -87,12 +88,33 @@ tuple3 d1 d2 d3 ctx =
   in
     ((r1, r2, r3), ctx3)
     
-getTup : DecoderFunc (Int, Int, Int)
-getTup = tuple3 (bitNum 2) (bitNum 3) (bitNum 1)
 
-result : ((Int, Int, Int), DecodeContext)
 result = 
-  read [17, 4] getTup
+  let start = read [0xaf, 0xff]
+      skip = bitNum 2
+      getTup = tuple2 (readBitString 2) (bitNum 2)
+      getBitNum = (bitNum 2)
+      
+      (result, _) = start <| 
+                    skip >>| 
+                    getTup >>= \tupData -> 
+                    getBitNum >>= \x ->
+                    return ("data", x, tupData)      
+  in
+    result
+    
+(>>=) action1 action2 world0 =
+  let (a, world1) = action1 world0
+      (b, world2) = action2 a world1
+  in (b, world2)
+  
+(>>|) action1 action2 world0 =
+  let (_, world1) = action1 world0
+      (b, world2) = action2 world1
+  in (b, world2)
+  
+return value world =
+  ( value, world )
 
 main : Html.Html a
 main =
