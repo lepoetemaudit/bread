@@ -1,8 +1,10 @@
-import Html
+module Bread exposing (..)
+
 import Bitwise
 
 type Bit = On | Off
 type alias BitString = List Bit
+type alias DecoderFunc a = (DecodeContext -> (a, DecodeContext)) 
 
 type alias DecodeContext = 
   { bitPosition : Int
@@ -64,7 +66,6 @@ read bytes decoder =
           , bytes = bytes
           , currentByte = 0xaf }
 
-type alias DecoderFunc a = (DecodeContext -> (a, DecodeContext)) 
 
 tuple2 : DecoderFunc a ->
          DecoderFunc b ->
@@ -88,21 +89,11 @@ tuple3 d1 d2 d3 ctx =
   in
     ((r1, r2, r3), ctx3)
     
-
-result = 
-  let start = read [0xaf, 0xff]
-      skip = bitNum 2
-      getTup = tuple2 (readBitString 2) (bitNum 2)
-      getBitNum = (bitNum 2)
-      
-      (result, _) = start <| 
-                    skip >>| 
-                    getTup >>= \tupData -> 
-                    getBitNum >>= \x ->
-                    return ("data", x, tupData)      
-  in
-    result
     
+(>>=) :  (DecodeContext -> ( a, DecodeContext )) 
+      -> (a -> DecodeContext -> ( b, DecodeContext )) 
+      -> DecodeContext 
+      -> ( b, DecodeContext )
 (>>=) action1 action2 world0 =
   let (a, world1) = action1 world0
       (b, world2) = action2 a world1
@@ -113,9 +104,6 @@ result =
       (b, world2) = action2 world1
   in (b, world2)
   
+return : a -> DecodeContext -> ( a, DecodeContext )
 return value world =
   ( value, world )
-
-main : Html.Html a
-main =
-  Html.text <| toString result
