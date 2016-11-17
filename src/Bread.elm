@@ -59,6 +59,27 @@ bitNum amount ctx =
   let (bits, ctx_) = readBitString amount ctx
   in 
     (bitStringToInt bits, ctx_) 
+
+type BitField a = BitField (List a)
+
+bitField : List a -> DecodeContext -> ((BitField a), DecodeContext)
+bitField bits ctx =
+  let (bitfield, ctx_) = 
+    List.foldl (\acc (bs, ctx) -> 
+                 let (ctx_, bit) = takeBit ctx 
+                 in
+                   case bit of
+                     On -> (acc :: bs, ctx_)
+                     Off -> (bs, ctx_))
+
+               ([], ctx) bits
+  in 
+    (BitField bitfield, ctx) 
+
+hasBit : a -> BitField a -> Bool
+hasBit bit (BitField bf) =
+  List.any ((==) bit) bf
+
   
 read : List Int -> DecoderFunc a -> (a, DecodeContext)
 read bytes decoder =
