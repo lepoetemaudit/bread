@@ -30,12 +30,24 @@ bitStringToInt bitString =
                                       0)
   |> List.sum
 
+advanceByte : DecodeContext -> DecodeContext
+advanceByte ctx =
+  case ctx.bytes of
+    byte :: rest ->
+      { bytes = rest, currentByte = byte, bitPosition = 0 }
+    [] -> ctx -- TODO: SHOULD FAIL!
+
 takeBit : DecodeContext -> (DecodeContext, Bit)
 takeBit ctx =
   let val = Bitwise.shiftLeftBy ctx.bitPosition 1
+      ctx_ = if ctx.bitPosition == 8 then
+               advanceByte ctx
+             else
+               ctx
+             
   in
-    ( { ctx | bitPosition = ctx.bitPosition + 1 }
-    , if (Bitwise.and val ctx.currentByte) > 0 then
+    ( { ctx_ | bitPosition = ctx_.bitPosition + 1 }
+    , if (Bitwise.and val ctx_.currentByte) > 0 then
         On
       else
         Off )
@@ -83,9 +95,11 @@ hasBit bit (BitField bf) =
   
 read : List Int -> DecoderFunc a -> (a, DecodeContext)
 read bytes decoder =
-  decoder { bitPosition = 0
-          , bytes = bytes
-          , currentByte = 0xaf }
+  { bitPosition = 0
+  , bytes = bytes
+  , currentByte = 0 }
+  |> advanceByte
+  |> decoder
 
 
 tuple2 : DecoderFunc a ->
