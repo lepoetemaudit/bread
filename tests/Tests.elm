@@ -15,6 +15,7 @@ type BitFlag =
   | Carry
   | Zero
 
+fields : List BitFlag
 fields = 
   [ Negative
   , Overflow
@@ -83,4 +84,10 @@ all =
                 Expect.false "Should not have the unused bit" 
                             (hasBit Unused bitSet)
           ]
+        , describe "failures"
+          [ test "overflows" <|
+            \() ->
+              Expect.equal 
+                (Err "Buffer overflow")
+                overflow]
         ]

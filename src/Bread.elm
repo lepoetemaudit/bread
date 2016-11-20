@@ -5,7 +5,7 @@ import Bitwise
 type Bit = On | Off
 type alias BitString = List Bit
 type alias DecoderFunc a = (DecodeContext -> (DecodeValue a, DecodeContext)) 
-
+type BitField a = BitField (List a)
 type alias DecodeValue a = Result String a
 
 type alias DecodeContext = 
@@ -32,29 +32,29 @@ bitStringToInt bitString =
                                       0)
   |> List.sum
 
-advanceByte : DecodeContext -> DecodeContext
+advanceByte : DecodeContext -> (DecodeValue (), DecodeContext)
 advanceByte ctx =
   case ctx.bytes of
     byte :: rest ->
-      { bytes = rest, currentByte = byte, bitPosition = 0 }
-    [] -> ctx -- TODO: SHOULD FAIL!
+      (Ok (), { bytes = rest, currentByte = byte, bitPosition = 0 })
+    [] -> (Err "Buffer overflow", ctx) 
 
 takeBit : DecodeContext -> (DecodeValue Bit, DecodeContext)
 takeBit ctx =
-  -- TODO - compoe this so that if taking a bit
-  -- fails the failure is propagated
   let val = Bitwise.shiftLeftBy ctx.bitPosition 1
-      ctx_ = if ctx.bitPosition == 8 then
-               advanceByte ctx
-             else
-               ctx
-             
+      (status, ctx_) = if ctx.bitPosition == 8 then
+              advanceByte ctx
+            else
+              (Ok (), ctx)         
   in
-    ( if (Bitwise.and val ctx_.currentByte) > 0 then
-        Ok On
-      else
-        Ok Off
-    , { ctx_ | bitPosition = ctx_.bitPosition + 1 } )
+    case status of
+      Ok () ->
+        ( if (Bitwise.and val ctx_.currentByte) > 0 then
+            Ok On
+          else
+            Ok Off
+        , { ctx_ | bitPosition = ctx_.bitPosition + 1 } )
+      Err err -> (Err err, ctx_)
 
 readBitString_ : Int -> DecodeContext -> BitString -> (DecodeValue BitString, DecodeContext)
 readBitString_ amount ctx bits =
@@ -70,19 +70,10 @@ readBitString_ amount ctx bits =
 readBitString : Int -> DecodeContext -> (DecodeValue BitString, DecodeContext)
 readBitString amount ctx =
   readBitString_ amount ctx []
-
---andThen : (a, DecodeContext) -> ((a, DecodeContext) -> (b, DecodeContext)) -> (b, DecodeContext) 
---andThen r f =
   
+bitNum : Int -> DecodeContext -> ( DecodeValue Int, DecodeContext )  
 bitNum amount =
-  readBitString amount >>= \x -> return <| Ok (bitStringToInt x)
---bitNum : Int -> DecodeContext -> (DecodeValue Int, DecodeContext)
---bitNum amount ctx =
-  -- TODO can we compose?
-  --readBitString amount ctx |> andThen bitStringToInt
-      
-
-type BitField a = BitField (List a)
+  readBitString amount >>= \x -> succeed (bitStringToInt x)
 
 bitField : List a -> DecodeContext -> (DecodeValue (BitField a), DecodeContext)
 bitField bits ctx =
@@ -112,8 +103,7 @@ read bytes decoder =
   { bitPosition = 0
   , bytes = bytes
   , currentByte = 0 }
-  |> advanceByte
-  |> decoder
+  |> advanceByte >>| decoder
 
 
 tuple2 : DecoderFunc a ->
@@ -150,14 +140,18 @@ tuple3 d1 d2 d3 ctx =
       (Ok r, world1) -> 
         let (b, world2) = action2 r world1
         in (b, world2)
-
       (Err err, world1) -> (Err err, world1)
-        
-(>>|) action1 action2 world0 =
-  let (_, world1) = action1 world0
-      (b, world2) = action2 world1
-  in (b, world2)
 
+(>>|) : (DecodeContext -> ( DecodeValue a, DecodeContext )) 
+      -> (DecodeContext -> ( DecodeValue b, DecodeContext )) 
+      -> DecodeContext 
+      -> ( DecodeValue b, DecodeContext )        
+(>>|) action1 action2 world0 =
+  case action1 world0 of
+    (Ok _, world1) ->
+      let (b, world2) = action2 world1
+      in (b, world2)
+    (Err err, world1) -> (Err err, world1)
   
 return : DecodeValue a -> DecodeContext -> ( DecodeValue a, DecodeContext )
 return value world =
