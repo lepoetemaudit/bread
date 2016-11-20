@@ -31,7 +31,7 @@ bitSet = (read [0x11] <| bitField fields)
          |> toResult
          |> Result.withDefault (BitField [])
 
-bindOperations : DecodeValue ( String, Int, ( BitString, Int ) )
+bindOperations : Result String ( String, Int, ( BitString, Int ) )
 bindOperations = 
   let start = read [0xaf, 0xff]
       skip = bitNum 2
@@ -51,7 +51,7 @@ read9Bits =
   read [0xaf, 0xf0] (bitNum 9)
   |> Tuple.second
 
-overflow : DecodeValue String
+overflow : Result String String
 overflow =
   let reader =
     (bitNum 24) >>| succeed "this should never return"

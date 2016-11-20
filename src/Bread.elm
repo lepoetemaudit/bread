@@ -1,19 +1,74 @@
-module Bread exposing (..)
+module Bread exposing (Bit (On, Off), BitString, BitField (BitField), DecodeContext, 
+                       intToBitString, bitStringToInt, readBitString, bitNum,
+                       bitField, read, hasBit, (>>=), (>>|), succeed, return,
+                       toResult, tuple2, tuple3)
+
+{-| A library for handling binary data in a manner somewhat similar to Elm's
+JSON decoder. It works on lists of bytes (represented as Ints) and has an
+especial focus on sub-byte decoding (for things such as bitfields or tightly
+packed data). 
+
+The state of the reader is returned from each function which
+makes it possible to change what you read depending on the content. For
+example, a binary format might define the length of data in some sort of
+header, so we need to first extract the length value, and then use it
+for the remaining data. Using functions such as (>>= and >>|) we can
+chain together these operations while capturing their values in a very
+convenient manner. For example:
+
+```
+bindOperations = 
+  -- define some of our read 'operations' for clarity
+  let skip = bitNum 2 
+      getTup = tuple2 (readBitString 2) (bitNum 2)
+      getBitNum = (bitNum 2)
+  in 
+    read [0xaf, 0xff] <| 
+    skip >>| 
+    getTup >>= \tupData ->        -- capture tuple value in `tupData`
+    getBitNum >>= \x ->           -- capture bit num value in `x`
+    succeed ("data", x, tupData)  -- gather values into a tuple 
+    |> toResult
+```
+
+# types 
+@docs BitField, Bit, BitString, DecodeContext
+
+# reading
+@docs read, toResult
+
+# Bit operations
+@docs bitStringToInt, intToBitString, readBitString, bitNum, bitField, hasBit
+
+# Composing readers
+@docs (>>=), (>>|), succeed, return, tuple2, tuple3
+-}
+
 
 import Bitwise
 
+-- Types
+
+{-| Represents the state off a bit, i.e. 1 = On, 0 = Off -}
 type Bit = On | Off
+
+{-| A string of bits which may converted to a number -}
 type alias BitString = List Bit
-type alias DecoderFunc a = (DecodeContext -> (DecodeValue a, DecodeContext)) 
+
+{-| Bitfields allow specifing values to substitute for numbered bits -}
 type BitField a = BitField (List a)
+
+type alias DecoderFunc a = (DecodeContext -> (DecodeValue a, DecodeContext)) 
 type alias DecodeValue a = Result String a
 
+{-| The current state of a read operation -}
 type alias DecodeContext = 
   { bitPosition : Int
   , bytes : List Int
   , currentByte : Int     
   }
 
+{-| Convert an integer into its component bits -}
 intToBitString : Int -> List Bit
 intToBitString int =
   List.map (\i -> if (Bitwise.and (Bitwise.shiftLeftBy i 1) int) > 0 then 
@@ -22,7 +77,7 @@ intToBitString int =
                     Off) 
            (List.range 0 7)
           
-  
+{-| Join a string of bits into its representative number -}  
 bitStringToInt : List Bit -> Int
 bitStringToInt bitString =
   bitString
@@ -67,14 +122,17 @@ readBitString_ amount ctx bits =
       (Err err, ctx_) -> (Err err, ctx_)
       
 
+{-| Read a given number of bits into a bit string -}
 readBitString : Int -> DecodeContext -> (DecodeValue BitString, DecodeContext)
 readBitString amount ctx =
   readBitString_ amount ctx []
   
+{-| Take a given number of bits and get their combined integer value -}  
 bitNum : Int -> DecodeContext -> ( DecodeValue Int, DecodeContext )  
 bitNum amount =
   readBitString amount >>= \x -> succeed (bitStringToInt x)
 
+{-| Map bits to a list of values, where bits are on -}
 bitField : List a -> DecodeContext -> (DecodeValue (BitField a), DecodeContext)
 bitField bits ctx =
   let 
@@ -93,11 +151,12 @@ bitField bits ctx =
       Ok bf -> (Ok <| BitField bf, ctx_)
       Err err -> (Err err, ctx_)
 
+{-| Determine whether a bit value is set in a bitfield -}
 hasBit : a -> BitField a -> Bool
 hasBit bit (BitField bf) =
   List.any ((==) bit) bf
 
-  
+{-| Decode a list of ints using the provided decoder function -}  
 read : List Int -> DecoderFunc a -> (DecodeValue a, DecodeContext)
 read bytes decoder =
   { bitPosition = 0
@@ -106,6 +165,7 @@ read bytes decoder =
   |> advanceByte >>| decoder
 
 
+{-| Takes a pair of `DecoderFunc`s and pairs the results in a tuple -}
 tuple2 : DecoderFunc a ->
          DecoderFunc b ->
          DecodeContext ->
@@ -117,6 +177,7 @@ tuple2 d1 d2 ctx =
   in
     (res, ctx2)
 
+{-| Takes three `DecoderFunc`s and combines the results in a tuple -}
 tuple3 : DecoderFunc a ->
          DecoderFunc b ->
          DecoderFunc c ->
@@ -130,7 +191,9 @@ tuple3 d1 d2 d3 ctx =
   in    
     (res, ctx3)
     
-    
+
+{-| Monadic bind - useful for chaining reads and aggregating the returned
+    values -}
 (>>=) :  (DecodeContext -> ( DecodeValue a, DecodeContext )) 
       -> (a -> DecodeContext -> ( DecodeValue b, DecodeContext )) 
       -> DecodeContext 
@@ -142,6 +205,8 @@ tuple3 d1 d2 d3 ctx =
         in (b, world2)
       (Err err, world1) -> (Err err, world1)
 
+{-| Monadic bind ignoring value - the result of the left function
+    is not passed to the right -}
 (>>|) : (DecodeContext -> ( DecodeValue a, DecodeContext )) 
       -> (DecodeContext -> ( DecodeValue b, DecodeContext )) 
       -> DecodeContext 
@@ -153,14 +218,17 @@ tuple3 d1 d2 d3 ctx =
       in (b, world2)
     (Err err, world1) -> (Err err, world1)
   
+{-| -}
 return : DecodeValue a -> DecodeContext -> ( DecodeValue a, DecodeContext )
 return value world =
   ( value, world )
 
+{-| Take the result of a read operation and turn it into a Result -}
 toResult : (DecodeValue a, DecodeContext) -> DecodeValue a
 toResult (val, _)=
   val
 
+{-| Raise a value that always succeeds -}
 succeed : a -> DecodeContext -> ( DecodeValue a, DecodeContext )
 succeed a = 
   return <| Ok a
