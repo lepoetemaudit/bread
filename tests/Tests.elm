@@ -27,9 +27,10 @@ fields =
 
 bitSet : BitField BitFlag
 bitSet = (read [0x11] <| bitField fields)
-         |> Tuple.first
+         |> toResult
+         |> Result.withDefault (BitField [])
 
-bindOperations : ( String, Int, ( BitString, Int ) )
+bindOperations : DecodeValue ( String, Int, ( BitString, Int ) )
 bindOperations = 
   let start = read [0xaf, 0xff]
       skip = bitNum 2
@@ -40,7 +41,7 @@ bindOperations =
                     skip >>| 
                     getTup >>= \tupData -> 
                     getBitNum >>= \x ->
-                    return ("data", x, tupData)      
+                    succeed ("data", x, tupData)      
   in
     result
 
@@ -49,15 +50,22 @@ read9Bits =
   read [0xaf, 0xf0] (bitNum 9)
   |> Tuple.second
 
+overflow : DecodeValue String
+overflow =
+  let reader =
+    (bitNum 24) >>| succeed "this should never return"
+  in 
+    read [0xaf, 0xf0] reader
+    |> toResult
+
+
 all : Test
 all =
     describe "Bread Test Suite"
         [ describe "test composition"
             [ test "Mixed output" <|
                 \() ->
-                  Expect.equal ("data", 2, ([On, On], 2)) bindOperations
-                    
-
+                  Expect.equal (Ok ("data", 2, ([On, On], 2))) bindOperations                  
             ]
         , describe "bytes should advance"
             [ test "requesting >8 bits advances the current byte" <|
