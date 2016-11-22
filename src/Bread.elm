@@ -130,7 +130,7 @@ readBitString amount ctx =
 {-| Take a given number of bits and get their combined integer value -}  
 bitNum : Int -> DecodeContext -> ( DecodeValue Int, DecodeContext )  
 bitNum amount =
-  readBitString amount >>= \x -> succeed (bitStringToInt x)
+  readBitString amount >>= (bitStringToInt >> succeed)
 
 {-| Map bits to a list of values, where bits are on -}
 bitField : List a -> DecodeContext -> (DecodeValue (BitField a), DecodeContext)
