@@ -1,7 +1,7 @@
 module Bread exposing (Bit (On, Off), BitString, BitField (BitField), DecodeContext, 
                        intToBitString, bitStringToInt, readBitString, bitNum,
                        bitField, read, hasBit, (>>=), (>>|), succeed, return,
-                       toResult, tuple2, tuple3)
+                       toResult, tuple2, tuple3, repeat)
 
 {-| A library for handling binary data in a manner somewhat similar to Elm's
 JSON decoder. It works on lists of bytes (represented as Ints) and has an
@@ -190,7 +190,17 @@ tuple3 d1 d2 d3 ctx =
       res = Result.map3 (,,) r1 r2 r3
   in    
     (res, ctx3)
-    
+  
+repeat_ num decoder items ctx =
+  case num of
+    0 -> (Ok items, ctx)
+    i -> 
+      case decoder ctx of
+        (Ok item, new_ctx) -> repeat_ (i - 1) decoder (item :: items) new_ctx
+        (Err err, new_ctx) -> (Err err, new_ctx)
+
+repeat num decoder ctx =
+  repeat_ num decoder [] ctx
 
 {-| Monadic bind - useful for chaining reads and aggregating the returned
     values -}
